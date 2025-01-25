@@ -138,11 +138,45 @@ def value(holdings, data, date):
     return val
 
 """
-Simple momentum strategy: sell in a down month and buy SGOV, buy after next up month.
+Simple momentum strategy: sell in a down month, buy after next up month.
+"""
+class MomentumStrategy(object):
+    def __init__(self, tickers):
+        self.momentum = {t: [] for t in tickers}
+
+    def buysell(self, t, entry):
+        self.momentum[t].append(float(entry["5. adjusted close"]))
+        if len(self.momentum[t]) == 3:
+            self.momentum[t] = self.momentum[t][1:] # only look at two most recent values
+
+        m = self.momentum[t]
+        l = len(m)
+        if l < 2: # not enough data
+            return True, True
+        grad = (m[1] - m[0]) / m[0]
+        if grad >= -0.05: # up/sideways/at most down 5%; buy or maintain
+            return True, False
+        else: # down; sell or don't buy
+            return False, True
+
+"""
+Just buy and hold.
+"""
+class BAHStrategy(object):
+    def __init__(self, tickers):
+        pass
+
+    def buysell(self, t, entry):
+        return True, False
+
+stratnames = {"Momentum": MomentumStrategy, "Buy and Hold": BAHStrategy}
+
+"""
+Main function to execute a trading strategy.
 
 FIXME assumes all tickers have same month end date. Snap to ME?
 """
-def momentum(weights, data, budget=10000, start=None):
+def trade(weights, data, strategyf, budget=10000, start=None):
     tickers = [t for t, w in weights.items()]
     univ = data[data.index.get_level_values("Ticker").isin(tickers)]
 
@@ -161,26 +195,15 @@ def momentum(weights, data, budget=10000, start=None):
         holdings = {t: [0] * len(daterange) for t in tickers}
         return pd.DataFrame(holdings, index=daterange)
 
+    strategy = strategyf(tickers) # initialise strategy
     holdings = {t: [] for t in tickers}
     holdings["Cash"] = []
     holdings["SGOV"] = []
-    momentum = {t: [] for t in tickers}
 
     def num_to_hold(t, date, pfsize):
         price = float(univ.loc[(t, date)]["4. close"])
         num = int(np.ceil(weights[t] / total_weight * pfsize / price))
         return num
-
-    # return (buy, sell)
-    def buysell(m):
-        l = len(m)
-        if l < 2: # not enough data
-            return True, True
-        grad = (m[1] - m[0]) / m[0]
-        if grad >= -0.05: # up/sideways; buy or maintain
-            return True, False
-        else: # down; sell or don't buy
-            return False, True
 
     for date in daterange:
         expenditure = 0.0
@@ -194,11 +217,8 @@ def momentum(weights, data, budget=10000, start=None):
             entry = univ.loc[(t, date)]
             num = num_to_hold(t, date, pfsize)
             expenditure += dividend(t, prevholdings, float(entry["7. dividend amount"]))
-            momentum[t].append(float(entry["5. adjusted close"]))
-            if len(momentum[t]) == 3:
-                momentum[t] = momentum[t][1:] # only look at two most recent values
 
-            buy, sell = buysell(momentum[t])
+            buy, sell = strategy.buysell(t, entry)
             price = float(entry["4. close"])
             if num - prevholdings > 0 and buy: # buy
                 expenditure -= (num - prevholdings) * price
@@ -211,7 +231,7 @@ def momentum(weights, data, budget=10000, start=None):
             else:
                 holdings[t].append(prevholdings)
 
-        # account for cash
+        # account for cash and SGOV (where cash is parked)
         balance = expenditure + (holdings["Cash"][-1] if len(holdings["Cash"]) > 0 else budget)
         try:
             sgov = data.loc["SGOV", date]
@@ -235,8 +255,6 @@ def momentum(weights, data, budget=10000, start=None):
 
     return pd.DataFrame(holdings, index=daterange)
 
-# def buyandhold(weights, data):
-
 class StrategyComparison(object):
     def __init__(self, tickers, data, indices):
         self.fig, self.ax = plt.subplots()
@@ -246,6 +264,7 @@ class StrategyComparison(object):
         self.weights = {t: 0 for t in tickers}
         self.sliders = {}
         self.budget = 10000
+        self.stratnavs = {}
 
         # may make into parameters later
         sliderheight = 0.05
@@ -253,13 +272,15 @@ class StrategyComparison(object):
         self.fig.subplots_adjust(bottom=sliderheight * (len(tickers) + 2))
         # 2 for the top and bottom margins of the sliders
 
-        strat = self.strategy()
-        daterange = strat.index
+        for name, strat in stratnames.items():
+            holds = self.strategy(strategy=strat)
+            daterange = holds.index
+            nav = [value(holds.loc[date], self.data, date) for date in daterange]
+            self.stratnavs[name], = self.ax.plot(daterange, nav, label=name)
+
         for index, values in indices.items():
             baseline = values.loc[daterange[0]].iloc[0]
             self.ax.plot(daterange, values.loc[daterange].div(baseline).mul(self.budget), label=index)
-        nav = [value(strat.loc[date], self.data, date) for date in daterange]
-        self.stratnav, = self.ax.plot(daterange, nav, label="Strategy")
 
         height = 0.0
         for t in tickers:
@@ -269,18 +290,19 @@ class StrategyComparison(object):
             height += sliderheight
         self.ax.legend()
 
-    def strategy(self):
-        return momentum(self.weights, self.data, budget=self.budget)
+    def strategy(self, strategy=MomentumStrategy):
+        return trade(self.weights, self.data, strategy, budget=self.budget)
 
     def update_weights_callback(self, t):
         return lambda w: self.update_weights(t, w)
 
     def update_weights(self, ticker, newweight):
         self.weights[ticker] = newweight
-        strat = momentum(self.weights, self.data)
-        daterange = strat.index
-        nav = [value(strat.loc[date], self.data, date) for date in daterange]
-        self.stratnav.set_ydata(nav)
+        for name, strat in stratnames.items():
+            holds = trade(self.weights, self.data, strat)
+            daterange = holds.index
+            nav = [value(holds.loc[date], self.data, date) for date in daterange]
+            self.stratnavs[name].set_ydata(nav)
         self.fig.canvas.draw_idle()
 
 if __name__ == "__main__":
@@ -292,9 +314,9 @@ if __name__ == "__main__":
                   "PTL", # largest 500
                   "BIBL", # top 100 by Biblical score
                   "WWJD", # international
-                  "KOCG", "AVEDX", # "AVEGX", # Catholic
+                  "KOCG", "AVEDX", "AVEGX", # Catholic
                   "CATH", "CEFA", # "Catholic values"
-                  "CSPX.L", "VWRA.L", # "IWDA.L", "VUAA.L", # global indices
+                  "CSPX.L", "VWRA.L", "IWDA.L", "VUAA.L", # global indices
                  ], d, indices)
     plt.show(block=False)
 
