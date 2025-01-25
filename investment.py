@@ -141,7 +141,6 @@ def value(holdings, data, date):
 Simple momentum strategy: sell in a down month and buy SGOV, buy after next up month.
 
 FIXME assumes all tickers have same month end date. Snap to ME?
-FIXME handle weight = 0
 """
 def momentum(weights, data, budget=10000, start=None):
     tickers = [t for t, w in weights.items()]
@@ -214,14 +213,31 @@ def momentum(weights, data, budget=10000, start=None):
 
         # account for cash
         balance = expenditure + (holdings["Cash"][-1] if len(holdings["Cash"]) > 0 else budget)
-        # TODO buy SGOV
+        try:
+            sgov = data.loc["SGOV", date]
+            balance += float(sgov["7. dividend amount"]) * holdings["SGOV"][-1]
+            price = float(sgov["4. close"])
+            if balance < -100:
+                sgov_tosell = min(holdings["SGOV"][-1], np.ceil(-1 * balance / price))
+                if sgov_tosell > 0:
+                    balance += sgov_tosell * price
+                    balance -= ibkr_txnfees(t, sgov_tosell, price, sell=True)
+                holdings["SGOV"].append(holdings["SGOV"][-1] - sgov_tosell)
+            else:
+                sgov_tobuy = np.ceil(balance / price)
+                if sgov_tobuy > 0:
+                    balance -= sgov_tobuy * price
+                    balance -= ibkr_txnfees(t, sgov_tobuy, price, sell=False)
+                holdings["SGOV"].append(holdings["SGOV"][-1] + sgov_tobuy)
+        except (KeyError, IndexError):
+            holdings["SGOV"].append(holdings["SGOV"][-1] if len(holdings["SGOV"]) > 0 else 0)
         holdings["Cash"].append(balance)
 
     return pd.DataFrame(holdings, index=daterange)
 
 # def buyandhold(weights, data):
 
-class Strategy(object):
+class StrategyComparison(object):
     def __init__(self, tickers, data, indices):
         self.fig, self.ax = plt.subplots()
         self.fig.set_size_inches(12, 12)
@@ -272,7 +288,7 @@ if __name__ == "__main__":
     spx = extract_csv("Data/SPX.csv", "%m/%d/%Y", 1)
     d = extract_av(AV_PATH, TICKERS)
     indices = {"SPX": spx, "AWCI": acwi}
-    S = Strategy([
+    SC = StrategyComparison([
                   "PTL", # largest 500
                   "BIBL", # top 100 by Biblical score
                   "WWJD", # international
