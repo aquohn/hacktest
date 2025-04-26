@@ -1,6 +1,7 @@
 import pandas as pd
+import numpy as np
 
-from fees import ibkr_txnfees
+from fees import ibkr_txnfees, dividend
 
 def getnearest(df, date):
     idx = df.index.get_indexer([date], method="nearest")

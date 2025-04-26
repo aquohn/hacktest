@@ -1,10 +1,9 @@
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 from matplotlib.widgets import Button, Slider
 
 from strategies import MomentumStrategy, STRATNAMES
-from data import extract_csv, extract_av
+from data import AVExtractor, SPXExtractor, ACWIExtractor
 from engine import trade, value
 from config import TICKERS, AV_PATH, FMP_PATH, TO_COMPARE
 
@@ -53,7 +52,7 @@ class StrategyComparison(object):
 
     def update_weights(self, ticker, newweight):
         self.weights[ticker] = newweight
-        for name, strat in stratnames.items():
+        for name, strat in STRATNAMES.items():
             holds = trade(self.weights, self.data, strat)
             daterange = holds.index
             nav = [value(holds.loc[date], self.data, date) for date in daterange]
@@ -61,9 +60,9 @@ class StrategyComparison(object):
         self.fig.canvas.draw_idle()
 
 if __name__ == "__main__":
-    acwi = extract_csv("Data/ACWI.csv", "%b %d, %Y", 1)
-    spx = extract_csv("Data/SPX.csv", "%m/%d/%Y", 1)
-    d = extract_av(AV_PATH, TICKERS)
+    acwi = ACWIExtractor("Data/", ["ACWI"]).format_data()
+    spx = SPXExtractor("Data/", ["SPX"]).format_data()
+    d = AVExtractor(AV_PATH, TICKERS).format_data()
     indices = {"SPX": spx, "AWCI": acwi}
     SC = StrategyComparison(TO_COMPARE, d, indices)
     plt.show(block=False)
