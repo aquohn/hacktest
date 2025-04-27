@@ -1,0 +1,5 @@
+config.py
+Data/dataconfig.mk
+*.json
+*.csv
+*.zip
