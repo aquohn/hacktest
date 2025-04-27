@@ -4,7 +4,7 @@ from matplotlib.widgets import Button, Slider
 
 from strategies import MomentumStrategy, STRATNAMES
 from data import AVExtractor, SPXExtractor, ACWIExtractor
-from engine import trade, value
+from engine import Trade, value
 from config import TICKERS, AV_PATH, FMP_PATH, TO_COMPARE
 
 import ipdb
@@ -19,6 +19,7 @@ class StrategyComparison(object):
         self.sliders = {}
         self.budget = 10000
         self.stratnavs = {}
+        self.strattrades = {}
 
         # may make into parameters later
         sliderheight = 0.05
@@ -27,7 +28,8 @@ class StrategyComparison(object):
         # 2 for the top and bottom margins of the sliders
 
         for name, strat in STRATNAMES.items():
-            holds = self.strategy(strategy=strat)
+            self.strattrades[name] = Trade(self.data, self.weights, strat, budget=self.budget)
+            holds = self.strattrades[name].execute()
             daterange = holds.index
             nav = [value(holds.loc[date], self.data, date) for date in daterange]
             self.stratnavs[name], = self.ax.plot(daterange, nav, label=name)
@@ -44,16 +46,14 @@ class StrategyComparison(object):
             height += sliderheight
         self.ax.legend()
 
-    def strategy(self, strategy=MomentumStrategy):
-        return trade(self.weights, self.data, strategy, budget=self.budget)
-
     def update_weights_callback(self, t):
         return lambda w: self.update_weights(t, w)
 
     def update_weights(self, ticker, newweight):
         self.weights[ticker] = newweight
         for name, strat in STRATNAMES.items():
-            holds = trade(self.weights, self.data, strat)
+            self.strattrades[name].set_weights(self.weights)
+            holds = self.strattrades[name].execute()
             daterange = holds.index
             nav = [value(holds.loc[date], self.data, date) for date in daterange]
             self.stratnavs[name].set_ydata(nav)
