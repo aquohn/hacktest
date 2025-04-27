@@ -34,12 +34,12 @@ class Trade(object):
                  reserve="SGOV", budget=10000, start=None, margin=-100):
         self.data = data
         self.set_weights(weights)
-        self.strategy = Strategy(self.tickers)
         self.univ = self.data[self.data.index.get_level_values("Ticker").isin(self.tickers)]
         self.reserve = reserve
         self.budget = budget
         self.margin = margin
         self.set_daterange(start)
+        self.Strategy = Strategy
 
     def set_daterange(self, start):
         # get range of dates for each ticker
@@ -66,7 +66,10 @@ class Trade(object):
         Update `holdings` with number of shares to buy and sell, and return expenditure for this trade.
         """
         expenditure = 0.0
-        pfsize = latest_value(self.holdings, self.data, date)
+        if all(len(self.holdings[t]) == 0 for t in self.tickers):
+            pfsize = self.budget
+        else:
+            pfsize = latest_value(self.holdings, self.data, date)
         for t in self.tickers:
             prevholdings = self.holdings[t][-1] if len(self.holdings[t]) > 0 else 0
             if date not in self.univ.loc[t].index: # bail early if info not available
@@ -81,11 +84,12 @@ class Trade(object):
             price = float(entry["4. close"])
             if num - prevholdings > 0 and buy: # buy
                 expenditure -= (num - prevholdings) * price
+                # TODO only buy amount that will not put us below margin
                 expenditure -= ibkr_txnfees(t, num, price, sell=False)
                 self.holdings[t].append(num)
             elif prevholdings > 0 and sell: # sell
                 expenditure += prevholdings * price
-                expenditure -= ibkr_txnfees(t, num, price, sell=True)
+                expenditure -= ibkr_txnfees(t, prevholdings, price, sell=True)
                 self.holdings[t].append(0)
             else:
                 self.holdings[t].append(prevholdings)
@@ -107,12 +111,14 @@ class Trade(object):
                     balance += resv_tosell * price
                     balance -= ibkr_txnfees(self.reserve, resv_tosell, price, sell=True)
                 reshold.append(reshold[-1] - resv_tosell)
-            else:
+            elif balance > 0:
                 resv_tobuy = floor(balance / price)
                 if resv_tobuy > 0:
                     balance -= resv_tobuy * price
                     balance -= ibkr_txnfees(self.reserve, resv_tobuy, price, sell=False)
                 reshold.append(reshold[-1] + resv_tobuy)
+            else:
+                reshold.append(reshold[-1])
         except (KeyError, IndexError):
             reshold.append(reshold[-1] if len(reshold) > 0 else 0)
         self.holdings["Cash"].append(balance)
@@ -130,6 +136,7 @@ class Trade(object):
         self.holdings = {t: [] for t in self.tickers}
         self.holdings["Cash"] = []
         self.holdings[self.reserve] = []
+        self.strategy = self.Strategy(self.tickers)
 
         for date in self.daterange:
             expenditure = self.compute_trade(date)

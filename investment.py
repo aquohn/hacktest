@@ -7,6 +7,8 @@ from data import AVExtractor, SPXExtractor, ACWIExtractor
 from engine import Trade, value
 from config import TICKERS, AV_PATH, FMP_PATH, TO_COMPARE
 
+import ipdb
+
 class StrategyComparison(object):
     def __init__(self, tickers, data, indices, budget=10000):
         self.fig, self.ax = plt.subplots()
@@ -48,6 +50,7 @@ class StrategyComparison(object):
         return lambda w: self.update_weights(t, w)
 
     def update_weights(self, ticker, newweight):
+        # ipdb.set_trace()
         self.weights[ticker] = newweight
         for name, strat in STRATNAMES.items():
             self.strattrades[name].set_weights(self.weights)
@@ -65,5 +68,5 @@ if __name__ == "__main__":
     d = AVExtractor(AV_PATH, TICKERS).format_data()
     indices = {"SPX": spx, "AWCI": acwi}
     SC = StrategyComparison(TO_COMPARE, d, indices, budget=100000)
-    plt.show(block=False)
+    plt.show()
 
