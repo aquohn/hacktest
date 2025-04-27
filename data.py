@@ -60,7 +60,7 @@ class PriceExtractor(Extractor):
         # convert index to correct types
         lvls = df.index.levels
         df.index = df.index.set_levels([pd.CategoricalIndex(lvls[0]), pd.DatetimeIndex(lvls[1])]).set_names(["Ticker", "Date"])
-        df.index = df.index.sort_values()
+        df.sort_index(inplace=True)
         return df
 
 class AVExtractor(PriceExtractor):
