@@ -5,6 +5,8 @@ A simple, hackable framework for backtesting investment strategies, geared towar
 - Modeling of IBKR transaction fees (using fees for Singapore users)
 - Simple dashboard for tweaking strategy parameters and observing their impact
 
+![](docs/Plot.png)
+
 ## Installation and Usage
 
 First, register for the free data services of your choice and obtain API keys for them. Then, write these API keys, and the ticker symbols stocks whose data you wish to pull in, to `Data/dataconfig.mk` (following the example `Data/example_dataconfig.mk`). AlphaVantage and Financial Modeling Prep are supported out of the box; some tweaking of the Makefile would allow other sources to be supported. While in the `Data/` directory, pull in the data with `make` (using `make` makes it easier to pull the data in batches, which may be necessary due to free-tier API rate limits).
@@ -23,7 +25,7 @@ python -i investment.py
 
 ## Hacking
 
-`ipython` and `ipdb` are recommended for hacking.
+`ipython` and `ipdb` are recommended for hacking (set plots to blocking, i.e. `plt.show(block=True)`, to use `ipdb`).
 
 ### Data Sources
 
@@ -40,9 +42,9 @@ As hinted above, the current design only supports strategies following a specifi
 - If buying, calculate the total value of the portfolio, and calculate the fraction of that value which should go to that ticker. Purchase the corresponding number of shares.
 - If selling, put any extra cash in a reserve fund (SGOV by default).
 
-Trades use the closing price of the day, ignoring bid-ask spreads, and fractional shares are not supported. Margin interest is not accounted for, although this strategy should not allow the account balance to go negative unless things line up very nicely.
+Trades use the closing price of the day, ignoring bid-ask spreads, and fractional shares are not supported. Margin interest is not accounted for, although buy orders will not be filled if there is a cash deficit and no reserve funds, which should limit the deficit.
 
 The `buysell` function will be called in sequence over the range of dates which the strategy is being evaluated over. Management of any internal state is left to the implementation of the `buysell` function.
 
-Currently, only two strategies are implemented, buy-and-hold and a simple momentum strategy. Further strategies following this format can be implemented in `strategy.py`.
+Currently, only two strategies are implemented, buy-and-hold and a simple momentum strategy. Additional strategies following this format can be implemented in `strategy.py`.
 
