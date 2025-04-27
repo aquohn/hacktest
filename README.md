@@ -1,4 +1,4 @@
-# Investment Strategy Backtester
+# `hacktest`
 
 A simple, hackable framework for backtesting investment strategies, geared towards simple strategies that can be executed by a retail investor. Written in plain Python and shell, with the only external dependencies being `pandas` and `matplotlib`. Features include:
 - Utilities for pulling and parsing tick data from free sources ([AlphaVantage](https://www.alphavantage.co/), [Financial Modeling Prep](https://site.financialmodelingprep.com/)) and index data ([MSCI](https://www.msci.com/indexes), [S&P](https://www.spglobal.com/spdji/en/index-family/equity/us-equity/))
