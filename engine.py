@@ -7,19 +7,6 @@ def getnearest(df, date):
     idx = df.index.get_indexer([date], method="nearest")
     return df.loc[df.index.take(idx)]
 
-# TODO make holdings a data frame and unify with below
-def latest_value(holdings, data, date):
-    val = 0.0
-    for t in holdings:
-        if len(holdings[t]) == 0:
-            continue
-        if t == "Cash":
-            val += holdings["Cash"][-1]
-            continue
-        pos = holdings[t][-1]
-        val += pos * float(getnearest(data.loc[t], date)["4. close"].iloc[0])
-    return val
-
 def value(holdings, data, date):
     val = 0.0
     for t in holdings.index:
@@ -61,6 +48,18 @@ class Trade(object):
         num = int(floor(self.weights[t] / self.total_weight * pfsize / price))
         return num
 
+    def latest_value(self, date):
+        val = 0.0
+        for t in self.holdings:
+            if len(self.holdings[t]) == 0:
+                continue
+            if t == "Cash":
+                val += self.holdings["Cash"][-1]
+                continue
+            pos = self.holdings[t][-1]
+            val += pos * float(getnearest(self.data.loc[t], date)["4. close"].iloc[0])
+        return val
+
     def compute_trade(self, date):
         """
         Update `holdings` with number of shares to buy and sell, and return expenditure for this trade.
@@ -69,7 +68,9 @@ class Trade(object):
         if all(len(self.holdings[t]) == 0 for t in self.tickers):
             pfsize = self.budget
         else:
-            pfsize = latest_value(self.holdings, self.data, date)
+            pfsize = self.latest_value(date)
+        cash = self.holdings["Cash"][-1] if len(self.holdings["Cash"]) > 0 else self.budget
+        resv_amt = self.holdings[self.reserve][-1] if len(self.holdings[self.reserve]) > 0 else 0
         for t in self.tickers:
             prevholdings = self.holdings[t][-1] if len(self.holdings[t]) > 0 else 0
             if date not in self.univ.loc[t].index: # bail early if info not available
@@ -82,10 +83,9 @@ class Trade(object):
 
             buy, sell = self.strategy.buysell(t, entry)
             price = float(entry["4. close"])
-            if num - prevholdings > 0 and buy: # buy
+            if num - prevholdings > 0 and (cash > 0 or resv_amt > 0) and buy: # buy
                 expenditure -= (num - prevholdings) * price
-                # TODO only buy amount that will not put us below margin
-                expenditure -= ibkr_txnfees(t, num, price, sell=False)
+                expenditure -= ibkr_txnfees(t, num - prevholdings, price, sell=False)
                 self.holdings[t].append(num)
             elif prevholdings > 0 and sell: # sell
                 expenditure += prevholdings * price
